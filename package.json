@@ -5,7 +5,8 @@
   "main": "main.ts",
   "scripts": {
     "start": "ts-node-dev --respawn --transpile-only src/main.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "performance": "ts-node test/main.ts"
   },
   "keywords": [],
   "author": "",
@@ -13,7 +14,8 @@
   "type": "commonjs",
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",
-    "@grpc/proto-loader": "^0.8.0"
+    "@grpc/proto-loader": "^0.8.0",
+    "ts-node": "^10.9.2"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",

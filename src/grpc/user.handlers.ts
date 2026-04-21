@@ -1,9 +1,7 @@
 import { saveUser, getUserById, getAllUsers, generateId } from '../storage/user.store';
 import * as grpc from '@grpc/grpc-js';
 
-type User = { id: string; name: string; email: string };
-type CreateUserRequest = { name: string; email: string };
-type GetUserRequest = { id: string };
+import type { CreateUserRequest, Empty, GetUserRequest, User } from '../types/user';
 
 export function createUser(
   call: grpc.ServerUnaryCall<CreateUserRequest, User>,
@@ -52,7 +50,7 @@ export function getUser(
   callback(null, user);
 }
 
-export function listUsers(call: grpc.ServerWritableStream<any, User>) {
+export function listUsers(call: grpc.ServerWritableStream<Empty, User>) {
   const users = getAllUsers();
 
   if (!users.length) {

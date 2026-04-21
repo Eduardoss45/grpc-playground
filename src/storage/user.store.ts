@@ -1,6 +1,8 @@
 let currentId = 0;
 
-const users = new Map<string, any>();
+import type { User } from '../types/user';
+
+const users = new Map<string, User>();
 
 users.set('1', { id: '1', name: 'Eduardo', email: 'edu@email.com' });
 users.set('2', { id: '2', name: 'Ana', email: 'ana@email.com' });
@@ -17,14 +19,14 @@ export function generateId(): string {
   return String(currentId);
 }
 
-export function saveUser(user: any) {
+export function saveUser(user: User): void {
   users.set(user.id, user);
 }
 
-export function getUserById(id: string) {
+export function getUserById(id: string): User | null {
   return users.get(id) || null;
 }
 
-export function getAllUsers() {
+export function getAllUsers(): User[] {
   return Array.from(users.values());
 }
