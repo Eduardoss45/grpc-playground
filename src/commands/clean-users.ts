@@ -1,15 +1,36 @@
-import { pool } from '../database/postgres';
+import { postgres } from '../database/postgres';
+import { redis, connectRedis } from '../cache/redis';
+import { cacheEnabled } from '../config/cache';
 
 async function cleanUsers() {
   console.time('Clean');
 
-  await pool.query(`
-    TRUNCATE TABLE users CASCADE;
-  `);
+  try {
+    if (cacheEnabled) {
+      await connectRedis();
+    }
+
+    await postgres.query(`
+      TRUNCATE TABLE users CASCADE;
+    `);
+
+    console.log('Postgres limpo');
+
+    if (cacheEnabled) {
+      await redis.flushAll();
+      console.log('Redis limpo');
+    } else {
+      console.log('Redis não está ativo');
+    }
+  } finally {
+    await postgres.end();
+
+    if (cacheEnabled && redis.isOpen) {
+      await redis.quit();
+    }
+  }
 
   console.timeEnd('Clean');
-
-  await pool.end();
 }
 
 cleanUsers().catch(console.error);

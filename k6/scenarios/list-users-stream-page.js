@@ -5,15 +5,16 @@ const client = new Client();
 
 client.load(['../src/proto'], 'user.proto');
 
-export const options = {
-  vus: 10,
-  duration: '30s',
-};
+let connected = false;
 
-export default async () => {
-  client.connect('localhost:50051', {
-    plaintext: true,
-  });
+export async function listUsersStreamPage() {
+  if (!connected) {
+    client.connect('localhost:50051', {
+      plaintext: true,
+    });
+
+    connected = true;
+  }
 
   const stream = new Stream(client, 'user.UserService/ListUsers');
 
@@ -21,7 +22,7 @@ export default async () => {
   let failed = false;
 
   await new Promise((resolve, reject) => {
-    stream.on('data', user => {
+    stream.on('data', () => {
       received++;
     });
 
@@ -31,21 +32,22 @@ export default async () => {
 
     stream.on('error', err => {
       failed = true;
-      console.log(err.message);
-      reject(err);
+      resolve();
     });
 
-    stream.write({});
+    stream.write({
+      limit: 100,
+      offset: 0,
+    });
 
     stream.end();
   });
 
   check(null, {
-    'received users': () => received > 0,
+    'received 100 users': () => received === 100,
+
     'stream without error': () => !failed,
   });
 
-  client.close();
-
   sleep(0.1);
-};
+}

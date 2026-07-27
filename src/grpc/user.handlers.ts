@@ -1,9 +1,8 @@
 import * as grpc from '@grpc/grpc-js';
 
 import type { CreateUserRequest, GetUserRequest, ListUserRequest, User } from '../types/user';
-import { userRepository } from '../config/storage';
+import { userService } from '../config/dependencies';
 import { randomUUID } from 'node:crypto';
-
 export async function createUser(
   call: grpc.ServerUnaryCall<CreateUserRequest, User>,
   callback: grpc.sendUnaryData<User>
@@ -23,7 +22,7 @@ export async function createUser(
     email: call.request.email,
   };
 
-  await userRepository.create(user);
+  await userService.createUser(user);
 
   callback(null, user);
 }
@@ -39,7 +38,7 @@ export async function getUser(
     });
   }
 
-  const user = await userRepository.findById(call.request.id);
+  const user = await userService.getUser(call.request.id);
 
   if (!user) {
     return callback({
@@ -56,7 +55,7 @@ export async function listUsers(call: grpc.ServerWritableStream<ListUserRequest,
   let offset = call.request.offset || 0;
 
   while (true) {
-    const users = await userRepository.findAll(limit, offset);
+    const users = await userService.findAllUsers(limit, offset);
 
     if (!users.length) {
       break;

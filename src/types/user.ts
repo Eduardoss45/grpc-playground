@@ -7,12 +7,6 @@ export type User = {
   email: string;
 };
 
-export interface UserCache {
-  get(id: string): Promise<User | null>;
-  set(user: User): Promise<void>;
-  delete(id: string): Promise<void>;
-}
-
 export type CreateUserRequest = {
   name: string;
   email: string;

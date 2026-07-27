@@ -1,10 +1,10 @@
 import { User } from '../types/user';
 import { UserRepository } from './user.repository';
-import { pool } from '../database/postgres';
+import { postgres } from '../database/postgres';
 
 export class PostgresUserRepository implements UserRepository {
   async create(user: User): Promise<User> {
-    const result = await pool.query(
+    const result = await postgres.query(
       `
       INSERT INTO users (id, name, email)
       VALUES ($1, $2, $3)
@@ -17,7 +17,7 @@ export class PostgresUserRepository implements UserRepository {
   }
 
   async findById(id: string): Promise<User | null> {
-    const result = await pool.query(
+    const result = await postgres.query(
       `
       SELECT id, name, email
       FROM users
@@ -30,7 +30,7 @@ export class PostgresUserRepository implements UserRepository {
   }
 
   async findAll(limit = 100, offset = 0): Promise<User[]> {
-    const result = await pool.query(
+    const result = await postgres.query(
       `
       SELECT id, name, email
       FROM users
@@ -41,5 +41,15 @@ export class PostgresUserRepository implements UserRepository {
     );
 
     return result.rows;
+  }
+
+  async delete(id: string): Promise<void> {
+    await postgres.query(
+      `
+    DELETE FROM users
+    WHERE id = $1
+    `,
+      [id]
+    );
   }
 }

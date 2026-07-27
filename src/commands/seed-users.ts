@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
-import { pool } from '../database/postgres';
+import { postgres } from '../database/postgres';
 
 const TOTAL_USERS = 100_000;
 const BATCH_SIZE = 1000;
@@ -26,7 +26,7 @@ async function seed() {
       values.push(`($${p + 1}, $${p + 2}, $${p + 3})`);
     }
 
-    await pool.query(
+    await postgres.query(
       `
       INSERT INTO users(id, name, email)
       VALUES ${values.join(',')}
@@ -40,7 +40,7 @@ async function seed() {
   writeFileSync('./k6/seed-data/user-ids.json', JSON.stringify(ids));
 
   console.timeEnd('Seed');
-  await pool.end();
+  await postgres.end();
 }
 
 seed().catch(console.error);
