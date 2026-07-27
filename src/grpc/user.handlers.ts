@@ -1,9 +1,10 @@
-import { saveUser, getUserById, getAllUsers, generateId } from '../storage/user.store';
 import * as grpc from '@grpc/grpc-js';
 
-import type { CreateUserRequest, Empty, GetUserRequest, User } from '../types/user';
+import type { CreateUserRequest, GetUserRequest, ListUserRequest, User } from '../types/user';
+import { userRepository } from '../config/storage';
+import { randomUUID } from 'node:crypto';
 
-export function createUser(
+export async function createUser(
   call: grpc.ServerUnaryCall<CreateUserRequest, User>,
   callback: grpc.sendUnaryData<User>
 ) {
@@ -14,7 +15,7 @@ export function createUser(
     });
   }
 
-  const id = generateId();
+  const id = randomUUID();
 
   const user = {
     id,
@@ -22,12 +23,12 @@ export function createUser(
     email: call.request.email,
   };
 
-  saveUser(user);
+  await userRepository.create(user);
 
   callback(null, user);
 }
 
-export function getUser(
+export async function getUser(
   call: grpc.ServerUnaryCall<GetUserRequest, User>,
   callback: grpc.sendUnaryData<User>
 ) {
@@ -38,7 +39,7 @@ export function getUser(
     });
   }
 
-  const user = getUserById(call.request.id);
+  const user = await userRepository.findById(call.request.id);
 
   if (!user) {
     return callback({
@@ -50,15 +51,26 @@ export function getUser(
   callback(null, user);
 }
 
-export function listUsers(call: grpc.ServerWritableStream<Empty, User>) {
-  const users = getAllUsers();
+export async function listUsers(call: grpc.ServerWritableStream<ListUserRequest, User>) {
+  const limit = call.request.limit || 1000;
+  let offset = call.request.offset || 0;
 
-  if (!users.length) {
-    return call.end();
-  }
+  while (true) {
+    const users = await userRepository.findAll(limit, offset);
 
-  for (const user of users) {
-    call.write(user);
+    if (!users.length) {
+      break;
+    }
+
+    for (const user of users) {
+      if (call.cancelled) {
+        return;
+      }
+
+      call.write(user);
+    }
+
+    offset += limit;
   }
 
   call.end();
