@@ -1,11 +1,27 @@
 # gRPC Playground
 
+# Sumário
+
+- Objetivos
+- Stack
+- Arquitetura
+- Estrutura do Projeto
+- Fluxo de Consulta
+- Modos de Execução
+- Seed
+- Warm Cache
+- Cenário de Benchmark
+- Resultados
+- Scripts
+- Ambiente
+- Filosofia
+
 > Benchmark para avaliação do impacto de uma camada de cache Redis sobre uma aplicação gRPC utilizando PostgreSQL como banco de dados principal.
 
 O **gRPC Playground** é um projeto desenvolvido com foco em estudos de desempenho de aplicações backend. Seu objetivo é comparar dois cenários de execução utilizando exatamente a mesma aplicação:
 
-* **PostgreSQL (DB Only)**
-* **PostgreSQL + Redis (Cache Aside)**
+- **PostgreSQL (DB Only)**
+- **PostgreSQL + Redis (Cache Aside)**
 
 A proposta é demonstrar, através de testes reproduzíveis executados com **k6**, como a introdução de uma camada de cache altera métricas como throughput, latência e carga exercida sobre o banco de dados.
 
@@ -15,22 +31,22 @@ O projeto utiliza **gRPC** como protocolo de comunicação para reduzir o overhe
 
 # Objetivos
 
-* Comparar o desempenho entre **DB Only** e **DB + Redis**.
-* Demonstrar o padrão **Cache Aside** em aplicações backend.
-* Fornecer um ambiente reproduzível para experimentos de carga.
-* Servir como referência de arquitetura para aplicações gRPC em Node.js.
+- Comparar o desempenho entre **DB Only** e **DB + Redis**.
+- Demonstrar o padrão **Cache Aside** em aplicações backend.
+- Fornecer um ambiente reproduzível para experimentos de carga.
+- Servir como referência de arquitetura para aplicações gRPC em Node.js.
 
 ---
 
 # Stack
 
-* Node.js
-* TypeScript
-* gRPC
-* PostgreSQL
-* Redis
-* Docker
-* k6
+- Node.js
+- TypeScript
+- gRPC
+- PostgreSQL
+- Redis
+- Docker
+- k6
 
 ---
 
@@ -151,10 +167,10 @@ Repository --> Database
 
 Cada camada possui apenas uma responsabilidade:
 
-* **Handler** recebe requisições gRPC.
-* **Service** implementa a regra de negócio.
-* **Repository** acessa o PostgreSQL.
-* **Cache** gerencia leituras e gravações no Redis.
+- **Handler** recebe requisições gRPC.
+- **Service** implementa a regra de negócio.
+- **Repository** acessa o PostgreSQL.
+- **Cache** gerencia leituras e gravações no Redis.
 
 ---
 
@@ -288,9 +304,9 @@ Antes da execução dos testes é criada uma base contendo aproximadamente **100
 
 Durante esse processo:
 
-* usuários são inseridos no PostgreSQL;
-* todos os UUIDs são armazenados;
-* o k6 utiliza esses UUIDs para realizar consultas válidas.
+- usuários são inseridos no PostgreSQL;
+- todos os UUIDs são armazenados;
+- o k6 utiliza esses UUIDs para realizar consultas válidas.
 
 ```
 k6
@@ -360,6 +376,42 @@ Stream --> Grpc
 
 ---
 
+# Resultados
+
+Os benchmarks foram executados utilizando exatamente o mesmo cenário de carga, alterando apenas a presença da camada de cache Redis.
+
+## PostgreSQL + Redis (Warm Cache)
+
+![Benchmark com Redis](./assets/Captura%20de%20tela%202026-07-27%20204047.png)
+
+Nesse cenário, o Redis foi previamente aquecido utilizando o comando `warm-cache`, simulando um ambiente de produção onde os registros mais acessados já se encontram na camada de cache.
+
+Os resultados mostram uma redução significativa da latência média e um aumento expressivo no throughput da aplicação.
+
+---
+
+## PostgreSQL (Sem Cache)
+
+![Benchmark sem Redis](./assets/Captura%20de%20tela%202026-07-27%20205425.png)
+
+Neste cenário a aplicação consulta diretamente o PostgreSQL para todas as leituras, permitindo comparar o impacto da ausência de cache sob exatamente a mesma carga de trabalho.
+
+---
+
+## Comparação
+
+|          Métrica | PostgreSQL | PostgreSQL + Redis |
+| ---------------: | ---------: | -----------------: |
+|        Iterações |    276.787 |            861.083 |
+|       Throughput |  768 req/s |        2.392 req/s |
+|   Latência média |     1,02 s |             330 ms |
+| Latência mediana |     1,05 s |             212 ms |
+|              p95 |     1,24 s |             803 ms |
+
+A introdução do Redis elevou o throughput em aproximadamente **3,1×**, enquanto reduziu a latência média para cerca de **um terço** da observada utilizando apenas o PostgreSQL.
+
+---
+
 # Streaming
 
 O projeto utiliza **Server Streaming** apenas de forma paginada.
@@ -368,10 +420,10 @@ Não são realizados testes transmitindo toda a base de dados em uma única requ
 
 Essa decisão foi tomada porque aplicações reais normalmente utilizam:
 
-* paginação;
-* limites de resposta;
-* controle de memória;
-* redução do tráfego de rede.
+- paginação;
+- limites de resposta;
+- controle de memória;
+- redução do tráfego de rede.
 
 O objetivo do benchmark é representar cenários próximos de ambientes de produção.
 
