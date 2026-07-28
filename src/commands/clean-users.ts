@@ -1,33 +1,31 @@
-import { postgres } from '../database/postgres';
-import { redis, connectRedis } from '../cache/redis';
-import { cacheEnabled } from '../config/cache';
+import { createDependencies } from '../config/dependencies';
+import { env } from '../config/env';
+import { closeRedis, connectRedis } from '../infrastructure/cache/redis/redis.client';
+import { closePostgres } from '../infrastructure/database/postgres/postgres.client';
 
-async function cleanUsers() {
+async function cleanUsers(): Promise<void> {
   console.time('Clean');
 
   try {
-    if (cacheEnabled) {
+    if (env.cacheEnabled) {
       await connectRedis();
     }
 
-    await postgres.query(`
-      TRUNCATE TABLE users CASCADE;
-    `);
+    const { userService } = createDependencies();
+    const result = await userService.cleanUsers();
 
-    console.log('Postgres limpo');
+    if (result.postgresCleaned) {
+      console.log('Postgres limpo');
+    }
 
-    if (cacheEnabled) {
-      await redis.flushAll();
+    if (result.redisCleaned) {
       console.log('Redis limpo');
     } else {
-      console.log('Redis não está ativo');
+      console.log('Redis nao esta ativo');
     }
   } finally {
-    await postgres.end();
-
-    if (cacheEnabled && redis.isOpen) {
-      await redis.quit();
-    }
+    await closePostgres();
+    await closeRedis();
   }
 
   console.timeEnd('Clean');

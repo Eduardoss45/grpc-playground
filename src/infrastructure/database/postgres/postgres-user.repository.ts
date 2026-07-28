@@ -1,6 +1,6 @@
-import { User } from '../types/user';
-import { UserRepository } from './user.repository';
-import { postgres } from '../database/postgres';
+import { UserRepository } from '../../../application/ports/user.repository';
+import { User } from '../../../domain/user/user';
+import { postgres } from './postgres.client';
 
 export class PostgresUserRepository implements UserRepository {
   async create(user: User): Promise<User> {
@@ -9,11 +9,35 @@ export class PostgresUserRepository implements UserRepository {
       INSERT INTO users (id, name, email)
       VALUES ($1, $2, $3)
       RETURNING id, name, email
-    `,
+      `,
       [user.id, user.name, user.email]
     );
 
     return result.rows[0];
+  }
+
+  async createMany(users: User[]): Promise<void> {
+    if (!users.length) {
+      return;
+    }
+
+    const values: string[] = [];
+    const params: string[] = [];
+
+    users.forEach((user, index) => {
+      const position = index * 3;
+
+      params.push(user.id, user.name, user.email);
+      values.push(`($${position + 1}, $${position + 2}, $${position + 3})`);
+    });
+
+    await postgres.query(
+      `
+      INSERT INTO users(id, name, email)
+      VALUES ${values.join(',')}
+      `,
+      params
+    );
   }
 
   async findById(id: string): Promise<User | null> {
@@ -22,7 +46,7 @@ export class PostgresUserRepository implements UserRepository {
       SELECT id, name, email
       FROM users
       WHERE id = $1
-    `,
+      `,
       [id]
     );
 
@@ -36,7 +60,7 @@ export class PostgresUserRepository implements UserRepository {
       FROM users
       ORDER BY id
       LIMIT $1 OFFSET $2
-    `,
+      `,
       [limit, offset]
     );
 
@@ -46,10 +70,16 @@ export class PostgresUserRepository implements UserRepository {
   async delete(id: string): Promise<void> {
     await postgres.query(
       `
-    DELETE FROM users
-    WHERE id = $1
-    `,
+      DELETE FROM users
+      WHERE id = $1
+      `,
       [id]
     );
+  }
+
+  async truncate(): Promise<void> {
+    await postgres.query(`
+      TRUNCATE TABLE users CASCADE;
+    `);
   }
 }
