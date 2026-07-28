@@ -3,7 +3,7 @@ import { Client, Stream } from 'k6/net/grpc';
 
 const client = new Client();
 
-client.load(['../src/proto'], 'user.proto');
+client.load(['../src/transport/grpc/proto'], 'user.proto');
 
 let connected = false;
 

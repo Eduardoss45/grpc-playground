@@ -5,7 +5,7 @@ import { SharedArray } from 'k6/data';
 
 const client = new Client();
 
-client.load(['../src/proto'], 'user.proto');
+client.load(['../src/transport/grpc/proto'], 'user.proto');
 
 const ids = new SharedArray('user ids', () => {
   return JSON.parse(open('../seed-data/user-ids.json'));
