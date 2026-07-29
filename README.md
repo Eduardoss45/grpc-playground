@@ -1,40 +1,81 @@
 # gRPC Playground
 
+> Benchmark comparando o impacto da estratégia **Cache Aside** em uma aplicação **gRPC**, utilizando **PostgreSQL** como banco de dados principal e **Redis** como camada de cache.
+
+---
+
 # Sumário
 
+- Highlights
+- Metodologia
 - Objetivos
 - Stack
 - Arquitetura
 - Estrutura do Projeto
+- Arquitetura da Aplicação
 - Fluxo de Consulta
 - Modos de Execução
+- Execução do Benchmark
 - Seed
 - Warm Cache
 - Cenário de Benchmark
 - Resultados
+- Streaming
 - Scripts
+- Fluxo Completo
 - Ambiente
+- Hardware Utilizado
+- Limitações
 - Filosofia
 
-> Benchmark para avaliação do impacto de uma camada de cache Redis sobre uma aplicação gRPC utilizando PostgreSQL como banco de dados principal.
+---
 
-O **gRPC Playground** é um projeto desenvolvido com foco em estudos de desempenho de aplicações backend. Seu objetivo é comparar dois cenários de execução utilizando exatamente a mesma aplicação:
+# Highlights
 
-- **PostgreSQL (DB Only)**
-- **PostgreSQL + Redis (Cache Aside)**
+- Benchmark reproduzível utilizando **k6**
+- Dataset com aproximadamente **100.000 usuários**
+- Comparação entre **PostgreSQL** e **PostgreSQL + Redis**
+- **3,1× maior throughput**
+- **67% menor latência média**
+- Mesma aplicação, mesma carga e mesma infraestrutura, alterando apenas a presença da camada de cache
 
-A proposta é demonstrar, através de testes reproduzíveis executados com **k6**, como a introdução de uma camada de cache altera métricas como throughput, latência e carga exercida sobre o banco de dados.
+O objetivo deste projeto é medir, de forma reproduzível, o impacto da utilização do Redis sobre throughput, latência e carga exercida no PostgreSQL, mantendo exatamente a mesma aplicação e alterando apenas a estratégia de persistência.
 
-O projeto utiliza **gRPC** como protocolo de comunicação para reduzir o overhead do transporte e concentrar a análise no comportamento da camada de persistência.
+---
+
+# Metodologia
+
+Todos os benchmarks seguem exatamente a mesma metodologia de execução.
+
+A única variável alterada entre os cenários é a presença da camada Redis através da variável:
+
+```env
+CACHE_ACTIVE=true
+CACHE_ACTIVE=false
+```
+
+Todo o restante permanece inalterado.
+
+| Componente           | Mantido |
+| -------------------- | :-----: |
+| Aplicação            |   ✅    |
+| Banco de dados       |   ✅    |
+| Dataset              |   ✅    |
+| Cenário do benchmark |   ✅    |
+| Virtual Users (VUs)  |   ✅    |
+| Ambiente de execução |   ✅    |
+| Camada Redis         |   ❌    |
+
+Dessa forma, throughput, latência e utilização do PostgreSQL podem ser comparados diretamente, permitindo isolar o impacto da estratégia **Cache Aside**.
 
 ---
 
 # Objetivos
 
-- Comparar o desempenho entre **DB Only** e **DB + Redis**.
-- Demonstrar o padrão **Cache Aside** em aplicações backend.
-- Fornecer um ambiente reproduzível para experimentos de carga.
-- Servir como referência de arquitetura para aplicações gRPC em Node.js.
+- Comparar o desempenho entre **PostgreSQL** e **PostgreSQL + Redis**.
+- Demonstrar a implementação do padrão **Cache Aside**.
+- Disponibilizar um benchmark reproduzível.
+- Servir como referência para aplicações **gRPC** desenvolvidas em **Node.js**.
 
 ---
 
@@ -47,6 +88,8 @@ O projeto utiliza **gRPC** como protocolo de comunicação para reduzir o overhe
 - Redis
 - Docker
 - k6
+
+O projeto utiliza **gRPC** para reduzir o overhead do protocolo de comunicação, permitindo concentrar a análise na camada de persistência e no impacto da estratégia de cache.
 
 ---
 
@@ -82,6 +125,8 @@ Service --> Grpc
 Grpc --> Client
 ```
 
+O fluxo demonstra a comunicação entre cliente, aplicação, Redis e PostgreSQL durante a execução do benchmark.
+
 ---
 
 # Estrutura do Projeto
@@ -103,41 +148,34 @@ src
 │   └── clean-users.ts
 │
 ├── config
-│
 ├── database
-│
 ├── grpc
-│
 ├── infrastructure
-│
 ├── proto
-│
 ├── repositories
-│
 ├── services
-│
 └── types
 ```
-
-Cada diretório possui uma responsabilidade bem definida:
 
 | Diretório    | Responsabilidade                           |
 | ------------ | ------------------------------------------ |
 | app          | Inicialização da aplicação                 |
 | cache        | Implementação da camada Redis              |
 | commands     | Scripts auxiliares                         |
-| database     | Conexão com PostgreSQL                     |
+| database     | Configuração do PostgreSQL                 |
 | grpc         | Servidor, handlers e carregamento do Proto |
-| repositories | Acesso ao banco de dados                   |
+| repositories | Persistência                               |
 | services     | Regras de negócio                          |
-| proto        | Definições gRPC                            |
+| proto        | Contratos gRPC                             |
 | types        | Tipagens compartilhadas                    |
+
+A organização segue uma separação por responsabilidade, facilitando manutenção e evolução do projeto.
 
 ---
 
 # Arquitetura da Aplicação
 
-A aplicação segue uma separação em camadas.
+A aplicação está organizada em camadas independentes.
 
 ```mermaid
 flowchart TD
@@ -165,18 +203,11 @@ Service --> Repository
 Repository --> Database
 ```
 
-Cada camada possui apenas uma responsabilidade:
-
-- **Handler** recebe requisições gRPC.
-- **Service** implementa a regra de negócio.
-- **Repository** acessa o PostgreSQL.
-- **Cache** gerencia leituras e gravações no Redis.
-
----
+Cada camada possui uma única responsabilidade, reduzindo acoplamento e facilitando testes e manutenção.
 
 # Fluxo de Consulta
 
-Quando o cache está habilitado, a aplicação utiliza o padrão **Cache Aside**.
+Quando o cache está habilitado, a aplicação utiliza o padrão **Cache Aside** para consultas de leitura.
 
 ```mermaid
 sequenceDiagram
@@ -195,11 +226,11 @@ Service->>Redis: GET
 
 alt Cache Hit
 
-Redis-->>Service: usuário
+Redis-->>Service: Usuário
 
-Service-->>Handler: usuário
+Service-->>Handler: Resposta
 
-Handler-->>Cliente: resposta
+Handler-->>Cliente: Resposta
 
 else Cache Miss
 
@@ -207,84 +238,70 @@ Redis-->>Service: null
 
 Service->>PostgreSQL: SELECT
 
-PostgreSQL-->>Service: usuário
+PostgreSQL-->>Service: Usuário
 
 Service->>Redis: SET
 
-Service-->>Handler: usuário
+Service-->>Handler: Resposta
 
-Handler-->>Cliente: resposta
+Handler-->>Cliente: Resposta
 
 end
 ```
 
-Caso o cache esteja desabilitado, toda consulta é realizada diretamente no PostgreSQL.
+Nesse modelo, o PostgreSQL é consultado apenas quando o registro não está presente no Redis. Após a consulta, o cache é atualizado para atender requisições futuras.
 
 ---
 
 # Modos de Execução
 
-O projeto suporta dois modos de operação.
+O projeto suporta dois cenários de execução.
 
-## PostgreSQL
+## PostgreSQL (DB Only)
 
 ```text
 Cliente
-
-↓
-
+   │
+   ▼
 gRPC
-
-↓
-
+   │
+   ▼
 PostgreSQL
-
-↓
-
+   │
+   ▼
 Resposta
 ```
 
 ---
 
-## PostgreSQL + Redis
+## PostgreSQL + Redis (Cache Aside)
 
 ```text
 Cliente
-
-↓
-
+   │
+   ▼
 gRPC
-
-↓
-
+   │
+   ▼
 Redis
-
-↓
-
+   │
+   ▼
 Cache Hit?
-
-↓
-
-Sim → Resposta
-
-↓
-
-Não
-
-↓
-
-PostgreSQL
-
-↓
-
-Atualiza Cache
-
-↓
-
-Resposta
+ ├── Sim ─────────► Resposta
+ │
+ └── Não
+      │
+      ▼
+ PostgreSQL
+      │
+      ▼
+ Atualiza Cache
+      │
+      ▼
+   Resposta
 ```
 
-A alternância entre os dois cenários é realizada através da variável:
+A alternância entre os cenários é realizada através da variável:
 
 ```env
 CACHE_ACTIVE=true
@@ -296,40 +313,80 @@ ou
 CACHE_ACTIVE=false
 ```
 
+> [!IMPORTANT]
+> Após alterar `CACHE_ACTIVE`, reinicie a aplicação.
+>
+> As variáveis de ambiente são carregadas apenas durante a inicialização do processo Node.js. Alterar o arquivo `.env` sem reiniciar a aplicação fará com que o cenário anterior continue em execução, comprometendo os resultados do benchmark.
+
+---
+
+# Execução do Benchmark
+
+Todos os testes seguem exatamente a mesma sequência.
+
+```text
+Seed
+   │
+   ▼
+Definir CACHE_ACTIVE
+   │
+   ▼
+Inicializar aplicação
+   │
+   ▼
+Warm Cache (quando aplicável)
+   │
+   ▼
+Executar benchmark
+   │
+   ▼
+Coletar métricas
+   │
+   ▼
+Alterar CACHE_ACTIVE
+   │
+   ▼
+Reiniciar aplicação
+   │
+   ▼
+Executar novo benchmark
+```
+
+Essa sequência garante que ambos os cenários sejam executados sob as mesmas condições.
+
 ---
 
 # Seed
 
-Antes da execução dos testes é criada uma base contendo aproximadamente **100.000 usuários**.
+Antes do benchmark é criada uma base contendo aproximadamente **100.000 usuários**.
 
 Durante esse processo:
 
-- usuários são inseridos no PostgreSQL;
-- todos os UUIDs são armazenados;
-- o k6 utiliza esses UUIDs para realizar consultas válidas.
+- os usuários são inseridos no PostgreSQL;
+- seus UUIDs são exportados para o arquivo:
 
-```
-k6
-└── seed-data
+```text
+k6/
+└── seed-data/
     └── user-ids.json
 ```
+
+O benchmark utiliza esses identificadores para garantir que todas as consultas sejam válidas.
 
 ---
 
 # Warm Cache
 
-Após a criação da base é possível executar o processo de **Warm Cache**.
-
-Seu objetivo é popular previamente o Redis com todos os registros existentes, simulando um ambiente já em produção.
+O comando **Warm Cache** popula previamente o Redis com todos os registros existentes no PostgreSQL.
 
 ```mermaid
 flowchart LR
 
 A["Ler usuários do PostgreSQL"]
 
-B["Inserir no Redis"]
+B["Popular Redis"]
 
-C["Redis Aquecido"]
+C["Cache Aquecido"]
 
 D["Executar Benchmark"]
 
@@ -340,7 +397,7 @@ B --> C
 C --> D
 ```
 
-Sem essa etapa, os primeiros minutos do benchmark seriam dominados por **Cache Miss**, produzindo resultados pouco representativos.
+Essa etapa reduz a influência dos **Cache Miss** iniciais, produzindo resultados mais próximos de um ambiente de produção.
 
 ---
 
@@ -348,13 +405,13 @@ Sem essa etapa, os primeiros minutos do benchmark seriam dominados por **Cache M
 
 O benchmark utiliza uma carga mista composta por operações simultâneas.
 
-| Operação   | VUs | Objetivo           |
-| ---------- | --: | ------------------ |
-| CreateUser | 200 | Escrita contínua   |
-| GetUser    | 700 | Leitura individual |
-| ListUsers  | 100 | Streaming paginado |
+| Operação   | VUs | Objetivo                  |
+| ---------- | --: | ------------------------- |
+| CreateUser | 200 | Escrita contínua          |
+| GetUser    | 700 | Leitura individual        |
+| ListUsers  | 100 | Server Streaming paginado |
 
-A distribuição foi escolhida para representar aplicações predominantemente orientadas à leitura, mantendo operações de escrita concorrentes.
+A distribuição foi definida para representar aplicações com predominância de leitura, mantendo operações de escrita concorrentes.
 
 ```mermaid
 flowchart LR
@@ -374,27 +431,25 @@ Read --> Grpc
 Stream --> Grpc
 ```
 
----
+A carga utilizada não tem como objetivo determinar o limite máximo da aplicação. Ela foi escolhida para permitir uma comparação consistente entre os dois cenários utilizando exatamente a mesma infraestrutura.
 
 # Resultados
 
-Os benchmarks foram executados utilizando exatamente o mesmo cenário de carga, alterando apenas a presença da camada de cache Redis.
+Todos os benchmarks foram executados utilizando exatamente o mesmo cenário de carga, alterando apenas a presença da camada de cache Redis.
 
 ## PostgreSQL + Redis (Warm Cache)
 
 ![Benchmark com Redis](./assets/Captura%20de%20tela%202026-07-27%20204047.png)
 
-Nesse cenário, o Redis foi previamente aquecido utilizando o comando `warm-cache`, simulando um ambiente de produção onde os registros mais acessados já se encontram na camada de cache.
-
-Os resultados mostram uma redução significativa da latência média e um aumento expressivo no throughput da aplicação.
+O Redis foi previamente aquecido utilizando o comando `warm-cache`, simulando um ambiente onde os registros mais acessados já se encontram na camada de cache.
 
 ---
 
-## PostgreSQL (Sem Cache)
+## PostgreSQL (DB Only)
 
 ![Benchmark sem Redis](./assets/Captura%20de%20tela%202026-07-27%20205425.png)
 
-Neste cenário a aplicação consulta diretamente o PostgreSQL para todas as leituras, permitindo comparar o impacto da ausência de cache sob exatamente a mesma carga de trabalho.
+Neste cenário todas as leituras são realizadas diretamente no PostgreSQL, permitindo medir o impacto da ausência da camada de cache.
 
 ---
 
@@ -403,12 +458,21 @@ Neste cenário a aplicação consulta diretamente o PostgreSQL para todas as lei
 |          Métrica | PostgreSQL | PostgreSQL + Redis |
 | ---------------: | ---------: | -----------------: |
 |        Iterações |    276.787 |            861.083 |
-|       Throughput |  768 req/s |        2.392 req/s |
-|   Latência média |     1,02 s |             330 ms |
-| Latência mediana |     1,05 s |             212 ms |
-|              p95 |     1,24 s |             803 ms |
+|       Throughput |  768 req/s |    **2.392 req/s** |
+|   Latência média |     1,02 s |         **330 ms** |
+| Latência mediana |     1,05 s |         **212 ms** |
+|              p95 |     1,24 s |         **803 ms** |
 
-A introdução do Redis elevou o throughput em aproximadamente **3,1×**, enquanto reduziu a latência média para cerca de **um terço** da observada utilizando apenas o PostgreSQL.
+## Análise
+
+Mantendo exatamente a mesma aplicação, infraestrutura e carga de trabalho, a introdução da camada Redis proporcionou:
+
+- aumento aproximado de **3,1×** no throughput;
+- redução de aproximadamente **67%** na latência média;
+- redução significativa das consultas direcionadas ao PostgreSQL;
+- menor tempo de resposta para operações de leitura.
+
+Como apenas a estratégia de persistência foi alterada entre os cenários, os ganhos observados podem ser atribuídos diretamente à utilização do padrão **Cache Aside**.
 
 ---
 
@@ -418,14 +482,12 @@ O projeto utiliza **Server Streaming** apenas de forma paginada.
 
 Não são realizados testes transmitindo toda a base de dados em uma única requisição.
 
-Essa decisão foi tomada porque aplicações reais normalmente utilizam:
+Essa decisão aproxima o benchmark de aplicações reais, que normalmente utilizam:
 
 - paginação;
 - limites de resposta;
 - controle de memória;
 - redução do tráfego de rede.
-
-O objetivo do benchmark é representar cenários próximos de ambientes de produção.
 
 ---
 
@@ -433,31 +495,31 @@ O objetivo do benchmark é representar cenários próximos de ambientes de produ
 
 ## Seed
 
-Insere aproximadamente 100 mil usuários.
-
 ```bash
 npm run seed
 ```
+
+Cria aproximadamente **100.000 usuários** no PostgreSQL.
 
 ---
 
 ## Warm Cache
 
-Carrega todos os registros existentes no Redis.
-
 ```bash
 npm run warm-cache
 ```
+
+Popula previamente o Redis utilizando todos os registros existentes.
 
 ---
 
 ## Clean
 
-Remove todos os usuários do PostgreSQL e limpa completamente o Redis.
-
 ```bash
 npm run clean
 ```
+
+Remove todos os registros do PostgreSQL e limpa completamente o Redis.
 
 ---
 
@@ -466,6 +528,8 @@ npm run clean
 ```bash
 k6 run k6/mixed-test.js
 ```
+
+Executa o cenário de benchmark definido na pasta `k6`.
 
 ---
 
@@ -480,9 +544,9 @@ Warm["Warm Cache"]
 
 Start["Inicializar Aplicação"]
 
-Bench["Benchmark k6"]
+Bench["Executar Benchmark"]
 
-Metrics["Coleta de Métricas"]
+Metrics["Coletar Métricas"]
 
 Seed --> Warm
 
@@ -497,6 +561,8 @@ Bench --> Metrics
 
 # Ambiente
 
+A infraestrutura utilizada durante os benchmarks é composta pelos seguintes componentes.
+
 ```mermaid
 flowchart LR
 
@@ -506,7 +572,7 @@ Postgres["PostgreSQL"]
 
 Redis["Redis"]
 
-Node["Aplicação Node.js"]
+Node["Node.js"]
 
 K6["k6"]
 
@@ -523,10 +589,49 @@ K6 --> Node
 
 ---
 
+# Hardware Utilizado
+
+Todos os testes foram executados em um computador de uso pessoal, sem hardware dedicado para servidores.
+
+| Componente          | Especificação      |
+| ------------------- | ------------------ |
+| Processador         | Intel Core i5-8400 |
+| Núcleos             | 6                  |
+| Threads             | 6                  |
+| Memória RAM         | 16 GB DDR4         |
+| Armazenamento       | SSD SATA           |
+| Sistema Operacional | Windows 11 64 bits |
+| PostgreSQL          | Docker             |
+| Redis               | Docker             |
+| Aplicação           | Node.js            |
+| Ferramenta de carga | k6                 |
+
+Os resultados apresentados refletem exclusivamente este ambiente de execução.
+
+---
+
+# Limitações
+
+Este benchmark possui algumas limitações conhecidas.
+
+- Execução em máquina única.
+- Ambiente local.
+- Redis em modo standalone.
+- PostgreSQL em instância única.
+- Ausência de balanceamento de carga.
+- Ausência de replicação.
+- Não representa um ambiente distribuído de produção.
+
+O objetivo deste projeto é comparar duas arquiteturas sob exatamente as mesmas condições de execução, e não determinar o limite máximo de throughput da aplicação.
+
+---
+
 # Filosofia do Projeto
 
-Este projeto não busca produzir o maior número possível de requisições por segundo a qualquer custo. Seu objetivo é fornecer uma comparação justa entre duas arquiteturas amplamente utilizadas em aplicações backend.
+Este projeto foi desenvolvido para avaliar o impacto da estratégia **Cache Aside** em aplicações orientadas à leitura utilizando gRPC.
 
-Todas as medições são realizadas sobre a mesma implementação, alterando apenas a presença da camada de cache. Dessa forma, é possível observar de maneira objetiva o impacto do Redis na redução da carga sobre o banco de dados e na melhoria da latência percebida pelos clientes.
+Todas as medições são realizadas sobre a mesma implementação, alterando apenas a presença da camada Redis. Dessa forma, o benchmark permite isolar seu impacto sobre throughput, latência e carga exercida no PostgreSQL.
 
-O benchmark foi estruturado para reproduzir padrões encontrados em sistemas reais, priorizando consultas individuais, operações de escrita concorrentes e streaming paginado, evitando cenários artificiais que dificilmente seriam adotados em ambientes de produção.
+O cenário utilizado não é um **stress test**. A carga foi definida previamente para representar um ambiente de leitura predominante, permitindo comparar os dois cenários de forma consistente e reproduzível.
+
+Mais do que obter o maior número possível de requisições por segundo, o objetivo é compreender como uma camada de cache influencia o comportamento da aplicação quando submetida às mesmas condições de execução.
